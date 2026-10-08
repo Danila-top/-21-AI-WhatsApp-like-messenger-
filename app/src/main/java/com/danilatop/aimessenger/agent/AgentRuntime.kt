@@ -1,5 +1,6 @@
 package com.danilatop.aimessenger.agent
 
+import android.content.Context
 import com.danilatop.aimessenger.ai.AIProvider
 import com.danilatop.aimessenger.ai.AgentSpec
 import com.danilatop.aimessenger.ai.ChatTurn
@@ -12,11 +13,15 @@ import com.danilatop.aimessenger.data.MessageEntity
 import com.danilatop.aimessenger.data.ScheduledTaskEntity
 import com.danilatop.aimessenger.data.ToolApprovalEntity
 import com.danilatop.aimessenger.data.WorkspaceFileEntity
+import com.danilatop.aimessenger.tools.ToolExecution
 import com.danilatop.aimessenger.tools.ToolRegistry
+import com.danilatop.aimessenger.tools.ToolCall
+import com.danilatop.aimessenger.tasks.TaskScheduler
 import java.util.UUID
 import kotlin.math.max
 
 class AgentRuntime(
+    private val context: Context,
     private val db: AppDatabase,
     private val provider: AIProvider,
     private val tools: ToolRegistry = ToolRegistry()
@@ -144,7 +149,21 @@ class AgentRuntime(
         turns.removeAll { it.role == "user" && it.content == input }
         turns += ChatTurn("user", input + memoryPrefix)
 
-        val answer = provider.generate(agent, turns)
+        val answer = provider.generateWithTools(
+            agent = agent,
+            turns = turns,
+            tools = tools.definitions(),
+            execute = { call ->
+                val result = tools.execute(db, conversationId, call)
+                log(
+                    conversationId,
+                    agent.id,
+                    "tool." + call.name,
+                    result.output.take(500)
+                )
+                result
+            }
+        )
         saveAssistant(conversationId, agent.id, answer)
         log(conversationId, agent.id, "agent.completed", "chars=" + answer.length)
         return answer
@@ -241,8 +260,9 @@ class AgentRuntime(
             nextRunAt = System.currentTimeMillis() + max(1L, minutes) * 60_000L
         )
         db.tasks().upsert(task)
+        TaskScheduler.schedule(context, task.id, minutes)
         log(conversationId, "human", "task.scheduled", task.title)
-        val answer = "Задача записана в очередь и запланирована на +" + minutes + " мин."
+        val answer = "Задача поставлена в WorkManager и запланирована на +" + minutes + " мин."
         saveAssistant(conversationId, "scheduler", answer)
         return answer
     }
@@ -285,6 +305,9 @@ class AgentRuntime(
         saveAssistant(conversationId, "system", answer)
         return answer
     }
+
+    suspend fun runScheduledTask(conversationId: String, prompt: String): Result<String> =
+        send(conversationId, "[SCHEDULED TASK] " + prompt, "coordinator")
 
     private suspend fun saveAssistant(conversationId: String, senderId: String, text: String) {
         db.messages().insert(
