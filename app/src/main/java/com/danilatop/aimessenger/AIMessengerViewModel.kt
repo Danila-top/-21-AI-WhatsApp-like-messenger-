@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 class AIMessengerViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
     private val store = SecureStore(app)
-    private val runtime = AgentRuntime(db, AIProvider(store))
+    private val runtime = AgentRuntime(app, db, AIProvider(store))
 
     val conversations = db.conversations().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
