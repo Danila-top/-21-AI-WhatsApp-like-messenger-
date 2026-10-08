@@ -10,9 +10,12 @@ import androidx.room.RoomDatabase
         ConversationEntity::class,
         MessageEntity::class,
         MemoryEntity::class,
-        ActivityLogEntity::class
+        ActivityLogEntity::class,
+        WorkspaceFileEntity::class,
+        ScheduledTaskEntity::class,
+        ToolApprovalEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -20,6 +23,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun messages(): MessageDao
     abstract fun memories(): MemoryDao
     abstract fun activity(): ActivityDao
+    abstract fun files(): WorkspaceFileDao
+    abstract fun tasks(): ScheduledTaskDao
+    abstract fun approvals(): ToolApprovalDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
