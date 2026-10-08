@@ -80,3 +80,14 @@ data class ToolApprovalEntity(
     val createdAt: Long = System.currentTimeMillis(),
     val resolvedAt: Long? = null
 )
+
+
+@Entity(tableName = "mcp_servers")
+data class McpServerEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val endpoint: String,
+    val tokenKeyName: String? = null,
+    val enabled: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis()
+)
