@@ -337,6 +337,45 @@ class AgentRuntime(
         return answer
     }
 
+    suspend fun stream(
+        conversationId: String,
+        input: String,
+        agentId: String = "coordinator",
+        onDelta: suspend (String) -> Unit
+    ): Result<String> {
+        if (input.isBlank()) return Result.failure(IllegalArgumentException("Пустое сообщение."))
+
+        db.messages().insert(
+            MessageEntity(UUID.randomUUID().toString(), conversationId, "human", "human", input)
+        )
+        log(conversationId, "human", "message.sent.streaming", input.take(200))
+
+        return try {
+            val history = db.messages().recent(conversationId, 20).reversed()
+            val turns = history.map {
+                ChatTurn(
+                    if (it.senderType == "human") "user" else "assistant",
+                    it.content
+                )
+            }.toMutableList()
+            turns.removeAll { it.role == "user" && it.content == input }
+            turns += ChatTurn("user", input)
+
+            val answer = provider.streamText(
+                agents[agentId] ?: DefaultAgents.coordinator,
+                turns,
+                onDelta
+            )
+            saveAssistant(conversationId, agentId, answer)
+            log(conversationId, agentId, "agent.completed.streaming", "chars=" + answer.length)
+            Result.success(answer)
+        } catch (e: Throwable) {
+            val message = "Ошибка streaming: " + (e.message ?: "неизвестная ошибка")
+            saveAssistant(conversationId, "system", message)
+            Result.failure(e)
+        }
+    }
+
     suspend fun runScheduledTask(conversationId: String, prompt: String): Result<String> =
         send(conversationId, "[SCHEDULED TASK] " + prompt, "coordinator")
 
