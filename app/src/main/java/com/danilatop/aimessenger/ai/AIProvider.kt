@@ -1,14 +1,17 @@
 package com.danilatop.aimessenger.ai
 
 import com.danilatop.aimessenger.security.SecureStore
+import com.danilatop.aimessenger.tools.ToolCall
+import com.danilatop.aimessenger.tools.ToolDefinition
+import com.danilatop.aimessenger.tools.ToolExecution
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONArray
-import org.json.JSONObject
 
 enum class ProviderKind { OPENAI, DEEPSEEK, ANTHROPIC, GEMINI, OPENAI_COMPATIBLE }
 
@@ -24,43 +27,27 @@ data class AgentSpec(
 
 object DefaultAgents {
     val coordinator = AgentSpec(
-        id = "coordinator",
-        name = "Luna",
-        provider = ProviderKind.OPENAI,
-        model = "gpt-5.6-luna",
-        baseUrl = "https://api.openai.com",
-        keyName = "openai_api_key",
-        systemPrompt = "You are the coordinator of an AI-first messenger. Be precise, explicit about uncertainty, and delegate complex work when useful."
+        "coordinator", "Luna", ProviderKind.OPENAI, "gpt-5.6-terra",
+        "https://api.openai.com", "openai_api_key",
+        "You are the coordinator of an AI-first messenger. Be precise, explicit about uncertainty, and delegate complex work when useful."
     )
 
     val deepseek = AgentSpec(
-        id = "deepseek",
-        name = "DeepSeek",
-        provider = ProviderKind.DEEPSEEK,
-        model = "deepseek-flash",
-        baseUrl = "https://api.deepseek.com",
-        keyName = "deepseek_api_key",
-        systemPrompt = "You are the engineering and reasoning specialist. Prefer concrete technical solutions and verifiable steps."
+        "deepseek", "DeepSeek", ProviderKind.DEEPSEEK, "deepseek-flash",
+        "https://api.deepseek.com", "deepseek_api_key",
+        "You are the engineering and reasoning specialist. Prefer concrete technical solutions and verifiable steps."
     )
 
     val claude = AgentSpec(
-        id = "claude",
-        name = "Claude",
-        provider = ProviderKind.ANTHROPIC,
-        model = "claude-sonnet-4-6",
-        baseUrl = "https://api.anthropic.com",
-        keyName = "anthropic_api_key",
-        systemPrompt = "You are the critic and synthesis specialist. Challenge assumptions and improve quality without being vague."
+        "claude", "Claude", ProviderKind.ANTHROPIC, "claude-sonnet-4-6",
+        "https://api.anthropic.com", "anthropic_api_key",
+        "You are the critic and synthesis specialist. Challenge assumptions and improve quality without being vague."
     )
 
     val gemini = AgentSpec(
-        id = "gemini",
-        name = "Gemini",
-        provider = ProviderKind.GEMINI,
-        model = "gemini-3.8-flash",
-        baseUrl = "https://generativelanguage.googleapis.com",
-        keyName = "gemini_api_key",
-        systemPrompt = "You are a research and multimodal specialist. Structure evidence and distinguish facts from hypotheses."
+        "gemini", "Gemini", ProviderKind.GEMINI, "gemini-3.8-flash",
+        "https://generativelanguage.googleapis.com", "gemini_api_key",
+        "You are a research and multimodal specialist. Structure evidence and distinguish facts from hypotheses."
     )
 
     val all = listOf(coordinator, deepseek, claude, gemini)
@@ -74,194 +61,490 @@ class AIProvider(private val secureStore: SecureStore) {
 
     suspend fun generate(agent: AgentSpec, turns: List<ChatTurn>): String =
         withContext(Dispatchers.IO) {
-            val key = secureStore.get(agent.keyName)
-                ?: error("Нет API-ключа для " + agent.name + ". Открой Настройки → Провайдеры.")
-
+            val key = apiKey(agent)
             when (agent.provider) {
-                ProviderKind.OPENAI -> openAiResponses(agent, key, turns)
-                ProviderKind.DEEPSEEK,
-                ProviderKind.OPENAI_COMPATIBLE -> openAiStyle(agent, key, turns)
-                ProviderKind.ANTHROPIC -> anthropic(agent, key, turns)
-                ProviderKind.GEMINI -> gemini(agent, key, turns)
+                ProviderKind.GEMINI -> geminiText(agent, key, turns)
+                ProviderKind.ANTHROPIC -> anthropicText(agent, key, turns)
+                else -> openAiStyleText(agent, key, turns)
             }
         }
 
-    private fun openAiResponses(agent: AgentSpec, key: String, turns: List<ChatTurn>): String {
-        val input = JSONArray()
-        turns.forEach {
-            input.put(
+    suspend fun generateWithTools(
+        agent: AgentSpec,
+        turns: List<ChatTurn>,
+        tools: List<ToolDefinition>,
+        execute: suspend (ToolCall) -> ToolExecution,
+        maxRounds: Int = 8
+    ): String = withContext(Dispatchers.IO) {
+        val key = apiKey(agent)
+        when (agent.provider) {
+            ProviderKind.OPENAI -> openAiResponsesTools(agent, key, turns, tools, execute, maxRounds)
+            ProviderKind.DEEPSEEK, ProviderKind.OPENAI_COMPATIBLE ->
+                chatCompletionsTools(agent, key, turns, tools, execute, maxRounds)
+            ProviderKind.ANTHROPIC -> anthropicTools(agent, key, turns, tools, execute, maxRounds)
+            ProviderKind.GEMINI -> geminiInteractionTools(agent, key, turns, tools, execute, maxRounds)
+        }
+    }
+
+    private fun apiKey(agent: AgentSpec): String =
+        secureStore.get(agent.keyName)
+            ?: error("Нет API-ключа для " + agent.name + ". Открой Настройки → Провайдеры.")
+
+    private fun openAiResponsesTools(
+        agent: AgentSpec,
+        key: String,
+        turns: List<ChatTurn>,
+        tools: List<ToolDefinition>,
+        execute: suspend (ToolCall) -> ToolExecution,
+        maxRounds: Int
+    ): String {
+        var response = postJson(
+            agent.baseUrl.trimEnd('/') + "/v1/responses",
+            "Bearer " + key,
+            JSONObject()
+                .put("model", agent.model)
+                .put("instructions", agent.systemPrompt)
+                .put("input", turns.toJsonInput())
+                .put("tools", tools.toResponsesJson())
+                .put("store", false)
+                .toString()
+        )
+
+        repeat(maxRounds) {
+            val output = response.optJSONArray("output") ?: JSONArray()
+            val calls = parseOpenAiResponsesCalls(output)
+            if (calls.isEmpty()) return extractOpenAiOutputText(output)
+
+            val toolResults = JSONArray()
+            for (call in calls) {
+                val result = runTool(call, execute)
+                toolResults.put(
+                    JSONObject()
+                        .put("type", "function_call_output")
+                        .put("call_id", call.id)
+                        .put("output", result.output)
+                )
+            }
+
+            response = postJson(
+                agent.baseUrl.trimEnd('/') + "/v1/responses",
+                "Bearer " + key,
                 JSONObject()
-                    .put("role", it.role)
+                    .put("model", agent.model)
+                    .put("previous_response_id", response.getString("id"))
+                    .put("input", toolResults)
+                    .put("tools", tools.toResponsesJson())
+                    .put("store", false)
+                    .toString()
+            )
+        }
+
+        error("Превышено число раундов tool-calling.")
+    }
+
+    private fun chatCompletionsTools(
+        agent: AgentSpec,
+        key: String,
+        turns: List<ChatTurn>,
+        tools: List<ToolDefinition>,
+        execute: suspend (ToolCall) -> ToolExecution,
+        maxRounds: Int
+    ): String {
+        val messages = JSONArray()
+        messages.put(JSONObject().put("role", "system").put("content", agent.systemPrompt))
+        turns.forEach { messages.put(JSONObject().put("role", it.role).put("content", it.content)) }
+
+        repeat(maxRounds) {
+            val response = postJson(
+                agent.baseUrl.trimEnd('/') + "/v1/chat/completions",
+                "Bearer " + key,
+                JSONObject()
+                    .put("model", agent.model)
+                    .put("messages", messages)
+                    .put("tools", tools.toOpenAIChatJson())
+                    .put("tool_choice", "auto")
+                    .put("stream", false)
+                    .toString()
+            )
+
+            val message = response
+                .getJSONArray("choices")
+                .getJSONObject(0)
+                .getJSONObject("message")
+
+            messages.put(message)
+
+            val calls = message.optJSONArray("tool_calls")
+            if (calls == null || calls.length() == 0) {
+                return message.optString("content")
+            }
+
+            for (i in 0 until calls.length()) {
+                val raw = calls.getJSONObject(i)
+                val fn = raw.getJSONObject("function")
+                val call = ToolCall(
+                    id = raw.getString("id"),
+                    name = fn.getString("name"),
+                    arguments = JSONObject(fn.getString("arguments"))
+                )
+                val result = runTool(call, execute)
+                messages.put(
+                    JSONObject()
+                        .put("role", "tool")
+                        .put("tool_call_id", call.id)
+                        .put("content", result.output)
+                )
+            }
+        }
+
+        error("Превышено число раундов tool-calling.")
+    }
+
+    private fun anthropicTools(
+        agent: AgentSpec,
+        key: String,
+        turns: List<ChatTurn>,
+        tools: List<ToolDefinition>,
+        execute: suspend (ToolCall) -> ToolExecution,
+        maxRounds: Int
+    ): String {
+        val messages = JSONArray()
+        turns.forEach {
+            messages.put(
+                JSONObject()
+                    .put("role", if (it.role == "assistant") "assistant" else "user")
                     .put("content", it.content)
             )
         }
 
-        val body = JSONObject()
-            .put("model", agent.model)
-            .put("instructions", agent.systemPrompt)
-            .put("input", input)
-            .put("store", false)
-            .toString()
+        repeat(maxRounds) {
+            val response = postJson(
+                agent.baseUrl.trimEnd('/') + "/v1/messages",
+                key,
+                JSONObject()
+                    .put("model", agent.model)
+                    .put("max_tokens", 4096)
+                    .put("system", agent.systemPrompt)
+                    .put("messages", messages)
+                    .put("tools", tools.toAnthropicJson())
+                    .toString(),
+                mapOf(
+                    "x-api-key" to key,
+                    "anthropic-version" to "2023-06-01"
+                )
+            )
 
-        val url = agent.baseUrl.trimEnd('/') + "/v1/responses"
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer " + key)
-            .post(body.toRequestBody(jsonType))
-            .build()
+            val content = response.getJSONArray("content")
+            val calls = parseAnthropicCalls(content)
+            if (calls.isEmpty()) return extractAnthropicText(content)
 
-        client.newCall(request).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                error("HTTP " + response.code + ": " + text)
-            }
-
-            val output = JSONObject(text).optJSONArray("output") ?: JSONArray()
-            val answer = StringBuilder()
-            for (i in 0 until output.length()) {
-                val item = output.optJSONObject(i) ?: continue
-                if (item.optString("type") != "message") continue
-                val content = item.optJSONArray("content") ?: continue
-                for (j in 0 until content.length()) {
-                    val part = content.optJSONObject(j) ?: continue
-                    if (part.optString("type") == "output_text") {
-                        answer.append(part.optString("text"))
-                    }
-                }
-            }
-            require(answer.isNotBlank()) { "OpenAI Responses API вернул пустой текстовый ответ." }
-            return answer.toString()
-        }
-    }
-
-    private fun openAiStyle(agent: AgentSpec, key: String, turns: List<ChatTurn>): String {
-        val messages = JSONArray().apply {
-            put(JSONObject().put("role", "system").put("content", agent.systemPrompt))
-            turns.forEach {
-                put(JSONObject().put("role", it.role).put("content", it.content))
-            }
-        }
-
-        val body = JSONObject()
-            .put("model", agent.model)
-            .put("messages", messages)
-            .put("temperature", 0.2)
-            .put("stream", false)
-            .toString()
-
-        val base = agent.baseUrl.trimEnd('/')
-        val url = if (base.endsWith("/v1")) {
-            base + "/chat/completions"
-        } else {
-            base + "/v1/chat/completions"
-        }
-
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("Authorization", "Bearer " + key)
-            .post(body.toRequestBody(jsonType))
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                error("HTTP " + response.code + ": " + text)
-            }
-            return JSONObject(text)
-                .getJSONArray("choices")
-                .getJSONObject(0)
-                .getJSONObject("message")
-                .getString("content")
-        }
-    }
-
-    private fun anthropic(agent: AgentSpec, key: String, turns: List<ChatTurn>): String {
-        val messages = JSONArray()
-        turns.forEach {
-            if (it.role != "system") {
-                messages.put(
+            messages.put(JSONObject().put("role", "assistant").put("content", content))
+            val results = JSONArray()
+            for (call in calls) {
+                val result = runTool(call, execute)
+                results.put(
                     JSONObject()
-                        .put("role", if (it.role == "assistant") "assistant" else "user")
-                        .put("content", it.content)
+                        .put("type", "tool_result")
+                        .put("tool_use_id", call.id)
+                        .put("content", result.output)
                 )
             }
+            messages.put(JSONObject().put("role", "user").put("content", results))
         }
 
-        val body = JSONObject()
-            .put("model", agent.model)
-            .put("max_tokens", 4096)
-            .put("system", agent.systemPrompt)
-            .put("messages", messages)
-            .toString()
-
-        val url = agent.baseUrl.trimEnd('/') + "/v1/messages"
-        val request = Request.Builder()
-            .url(url)
-            .addHeader("x-api-key", key)
-            .addHeader("anthropic-version", "2023-06-01")
-            .post(body.toRequestBody(jsonType))
-            .build()
-
-        client.newCall(request).execute().use { response ->
-            val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                error("HTTP " + response.code + ": " + text)
-            }
-            return JSONObject(text)
-                .getJSONArray("content")
-                .getJSONObject(0)
-                .getString("text")
-        }
+        error("Превышено число раундов tool-calling.")
     }
 
-    private fun gemini(agent: AgentSpec, key: String, turns: List<ChatTurn>): String {
-        val prompt = buildString {
-            append(agent.systemPrompt)
-            append("\n\n")
-            turns.forEach {
-                append(it.role)
-                append(": ")
-                append(it.content)
-                append("\n")
+    private fun geminiInteractionTools(
+        agent: AgentSpec,
+        key: String,
+        turns: List<ChatTurn>,
+        tools: List<ToolDefinition>,
+        execute: suspend (ToolCall) -> ToolExecution,
+        maxRounds: Int
+    ): String {
+        var input: Any = turns.joinToString("\n") { it.role + ": " + it.content }
+        var previousId: String? = null
+
+        repeat(maxRounds) {
+            val body = JSONObject()
+                .put("model", agent.model)
+                .put("input", input)
+                .put("tools", tools.toGeminiInteractionJson())
+
+            if (previousId != null) body.put("previous_interaction_id", previousId)
+
+            val response = postJson(
+                agent.baseUrl.trimEnd('/') + "/v1beta/interactions",
+                key,
+                body.toString(),
+                mapOf("x-goog-api-key" to key)
+            )
+
+            previousId = response.getString("id")
+            val steps = response.optJSONArray("steps") ?: JSONArray()
+            val calls = parseGeminiInteractionCalls(steps)
+            if (calls.isEmpty()) return extractGeminiInteractionText(steps)
+
+            val results = JSONArray()
+            for (call in calls) {
+                val result = runTool(call, execute)
+                results.put(
+                    JSONObject()
+                        .put("type", "function_result")
+                        .put("name", call.name)
+                        .put("call_id", call.id)
+                        .put(
+                            "result",
+                            JSONArray().put(
+                                JSONObject()
+                                    .put("type", "text")
+                                    .put("text", result.output)
+                            )
+                        )
+                )
             }
+            input = results
         }
 
-        val contents = JSONArray().put(
+        error("Превышено число раундов tool-calling.")
+    }
+
+    private suspend fun runTool(
+        call: ToolCall,
+        execute: suspend (ToolCall) -> ToolExecution
+    ): ToolExecution = try {
+        execute(call)
+    } catch (e: Throwable) {
+        ToolExecution("Tool execution failed: " + (e.message ?: "unknown error"))
+    }
+
+    private fun parseOpenAiResponsesCalls(output: JSONArray): List<ToolCall> {
+        val calls = mutableListOf<ToolCall>()
+        for (i in 0 until output.length()) {
+            val item = output.optJSONObject(i) ?: continue
+            if (item.optString("type") != "function_call") continue
+            val args = runCatching { JSONObject(item.optString("arguments", "{}")) }.getOrDefault(JSONObject())
+            calls += ToolCall(
+                item.optString("call_id", item.optString("id")),
+                item.getString("name"),
+                args
+            )
+        }
+        return calls
+    }
+
+    private fun parseAnthropicCalls(content: JSONArray): List<ToolCall> {
+        val calls = mutableListOf<ToolCall>()
+        for (i in 0 until content.length()) {
+            val item = content.optJSONObject(i) ?: continue
+            if (item.optString("type") != "tool_use") continue
+            calls += ToolCall(
+                item.getString("id"),
+                item.getString("name"),
+                item.optJSONObject("input") ?: JSONObject()
+            )
+        }
+        return calls
+    }
+
+    private fun parseGeminiInteractionCalls(steps: JSONArray): List<ToolCall> {
+        val calls = mutableListOf<ToolCall>()
+        for (i in 0 until steps.length()) {
+            val item = steps.optJSONObject(i) ?: continue
+            if (item.optString("type") != "function_call") continue
+            calls += ToolCall(
+                item.optString("id"),
+                item.getString("name"),
+                item.optJSONObject("arguments") ?: JSONObject()
+            )
+        }
+        return calls
+    }
+
+    private fun extractOpenAiOutputText(output: JSONArray): String {
+        val result = StringBuilder()
+        for (i in 0 until output.length()) {
+            val item = output.optJSONObject(i) ?: continue
+            if (item.optString("type") != "message") continue
+            val content = item.optJSONArray("content") ?: continue
+            for (j in 0 until content.length()) {
+                val part = content.optJSONObject(j) ?: continue
+                if (part.optString("type") == "output_text") result.append(part.optString("text"))
+            }
+        }
+        require(result.isNotBlank()) { "OpenAI вернул пустой ответ." }
+        return result.toString()
+    }
+
+    private fun extractAnthropicText(content: JSONArray): String {
+        val result = StringBuilder()
+        for (i in 0 until content.length()) {
+            val item = content.optJSONObject(i) ?: continue
+            if (item.optString("type") == "text") result.append(item.optString("text"))
+        }
+        require(result.isNotBlank()) { "Anthropic вернул пустой текстовый ответ." }
+        return result.toString()
+    }
+
+    private fun extractGeminiInteractionText(steps: JSONArray): String {
+        val result = StringBuilder()
+        for (i in 0 until steps.length()) {
+            val item = steps.optJSONObject(i) ?: continue
+            if (item.optString("type") == "text") result.append(item.optString("text"))
+            if (item.optString("type") == "message") result.append(item.optString("text"))
+        }
+        require(result.isNotBlank()) { "Gemini вернул пустой текстовый ответ." }
+        return result.toString()
+    }
+
+    private fun openAiStyleText(agent: AgentSpec, key: String, turns: List<ChatTurn>): String {
+        val messages = JSONArray()
+            .put(JSONObject().put("role", "system").put("content", agent.systemPrompt))
+        turns.forEach { messages.put(JSONObject().put("role", it.role).put("content", it.content)) }
+
+        val response = postJson(
+            agent.baseUrl.trimEnd('/') + "/v1/chat/completions",
+            "Bearer " + key,
             JSONObject()
-                .put("role", "user")
-                .put(
-                    "parts",
-                    JSONArray().put(
-                        JSONObject().put("text", prompt)
-                    )
-                )
+                .put("model", agent.model)
+                .put("messages", messages)
+                .put("stream", false)
+                .toString()
         )
 
-        val url = agent.baseUrl.trimEnd('/') +
-            "/v1beta/models/" + agent.model +
-            ":generateContent?key=" + key
+        return response
+            .getJSONArray("choices")
+            .getJSONObject(0)
+            .getJSONObject("message")
+            .optString("content")
+    }
 
-        val body = JSONObject()
-            .put("contents", contents)
-            .toString()
+    private fun anthropicText(agent: AgentSpec, key: String, turns: List<ChatTurn>): String {
+        val messages = JSONArray()
+        turns.forEach {
+            messages.put(
+                JSONObject()
+                    .put("role", if (it.role == "assistant") "assistant" else "user")
+                    .put("content", it.content)
+            )
+        }
 
-        val request = Request.Builder()
+        val response = postJson(
+            agent.baseUrl.trimEnd('/') + "/v1/messages",
+            key,
+            JSONObject()
+                .put("model", agent.model)
+                .put("max_tokens", 4096)
+                .put("system", agent.systemPrompt)
+                .put("messages", messages)
+                .toString(),
+            mapOf(
+                "x-api-key" to key,
+                "anthropic-version" to "2023-06-01"
+            )
+        )
+
+        return response.getJSONArray("content")
+            .getJSONObject(0)
+            .getString("text")
+    }
+
+    private fun geminiText(agent: AgentSpec, key: String, turns: List<ChatTurn>): String {
+        val input = turns.joinToString("\n") { it.role + ": " + it.content }
+        val response = postJson(
+            agent.baseUrl.trimEnd('/') + "/v1beta/interactions",
+            key,
+            JSONObject()
+                .put("model", agent.model)
+                .put("input", agent.systemPrompt + "\n\n" + input)
+                .toString(),
+            mapOf("x-goog-api-key" to key)
+        )
+        val steps = response.optJSONArray("steps") ?: JSONArray()
+        return extractGeminiInteractionText(steps)
+    }
+
+    private fun postJson(
+        url: String,
+        bearer: String?,
+        body: String,
+        extraHeaders: Map<String, String> = emptyMap()
+    ): JSONObject {
+        val builder = Request.Builder()
             .url(url)
             .post(body.toRequestBody(jsonType))
-            .build()
 
-        client.newCall(request).execute().use { response ->
+        if (bearer != null) builder.addHeader("Authorization", bearer)
+        extraHeaders.forEach { (name, value) -> builder.addHeader(name, value) }
+
+        client.newCall(builder.build()).execute().use { response ->
             val text = response.body?.string().orEmpty()
-            if (!response.isSuccessful) {
-                error("HTTP " + response.code + ": " + text)
-            }
+            if (!response.isSuccessful) error("HTTP " + response.code + ": " + text)
             return JSONObject(text)
-                .getJSONArray("candidates")
-                .getJSONObject(0)
-                .getJSONObject("content")
-                .getJSONArray("parts")
-                .getJSONObject(0)
-                .getString("text")
         }
+    }
+}
+
+private fun List<ChatTurn>.toJsonInput(): JSONArray = JSONArray().apply {
+    forEach {
+        put(
+            JSONObject()
+                .put("role", it.role)
+                .put("content", it.content)
+        )
+    }
+}
+
+private fun List<ToolDefinition>.toResponsesJson(): JSONArray = JSONArray().apply {
+    forEach {
+        put(
+            JSONObject()
+                .put("type", "function")
+                .put("name", it.name)
+                .put("description", it.description)
+                .put("parameters", it.parameters)
+                .put("strict", true)
+        )
+    }
+}
+
+private fun List<ToolDefinition>.toOpenAIChatJson(): JSONArray = JSONArray().apply {
+    forEach {
+        put(
+            JSONObject()
+                .put("type", "function")
+                .put(
+                    "function",
+                    JSONObject()
+                        .put("name", it.name)
+                        .put("description", it.description)
+                        .put("parameters", it.parameters)
+                        .put("strict", true)
+                )
+        )
+    }
+}
+
+private fun List<ToolDefinition>.toAnthropicJson(): JSONArray = JSONArray().apply {
+    forEach {
+        put(
+            JSONObject()
+                .put("name", it.name)
+                .put("description", it.description)
+                .put("input_schema", it.parameters)
+        )
+    }
+}
+
+private fun List<ToolDefinition>.toGeminiInteractionJson(): JSONArray = JSONArray().apply {
+    forEach {
+        put(
+            JSONObject()
+                .put("type", "function")
+                .put("name", it.name)
+                .put("description", it.description)
+                .put("parameters", it.parameters)
+        )
     }
 }
