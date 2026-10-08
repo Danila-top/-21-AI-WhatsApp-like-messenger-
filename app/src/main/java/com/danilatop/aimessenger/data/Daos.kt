@@ -117,3 +117,22 @@ interface McpServerDao {
     @Query("UPDATE mcp_servers SET enabled = :enabled WHERE id = :id")
     suspend fun setEnabled(id: String, enabled: Boolean)
 }
+
+
+@Dao
+interface AgentProfileDao {
+    @Query("SELECT * FROM agent_profiles ORDER BY name ASC")
+    fun observeAll(): Flow<List<AgentProfileEntity>>
+
+    @Query("SELECT * FROM agent_profiles WHERE id = :id LIMIT 1")
+    suspend fun get(id: String): AgentProfileEntity?
+
+    @Query("SELECT * FROM agent_profiles WHERE enabled = 1 ORDER BY name ASC")
+    suspend fun enabled(): List<AgentProfileEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: AgentProfileEntity)
+
+    @Query("UPDATE agent_profiles SET enabled = :enabled, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun setEnabled(id: String, enabled: Boolean, updatedAt: Long)
+}
