@@ -79,7 +79,6 @@ interface WorkspaceFileDao {
 interface ScheduledTaskDao {
     @Query("SELECT * FROM scheduled_tasks ORDER BY nextRunAt ASC")
     fun observeAll(): Flow<List<ScheduledTaskEntity>>
-    fun observeAll(): Flow<List<ScheduledTaskEntity>>
 
     @Query("SELECT * FROM scheduled_tasks WHERE conversationId = :conversationId ORDER BY nextRunAt ASC")
     fun observeForConversation(conversationId: String): Flow<List<ScheduledTaskEntity>>
