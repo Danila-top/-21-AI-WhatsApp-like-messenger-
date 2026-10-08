@@ -1,0 +1,77 @@
+package com.danilatop.aimessenger
+
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.danilatop.aimessenger.ai.AIProvider
+import com.danilatop.aimessenger.agent.AgentRuntime
+import com.danilatop.aimessenger.data.AppDatabase
+import com.danilatop.aimessenger.data.MemoryEntity
+import com.danilatop.aimessenger.security.SecureStore
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+
+class AIMessengerViewModel(app: Application) : AndroidViewModel(app) {
+    private val db = AppDatabase.get(app)
+    private val store = SecureStore(app)
+    private val runtime = AgentRuntime(db, AIProvider(store))
+
+    val conversations = db.conversations().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val memories = db.memories().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val activity = db.activity().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun messages(conversationId: String) =
+        db.messages().observeForConversation(conversationId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun ensureSeed() {
+        viewModelScope.launch {
+            if (conversations.value.isEmpty()) {
+                runtime.createConversation("Лаборатория AI", "coordinator,deepseek,claude,gemini")
+            }
+        }
+    }
+
+    fun newChat(title: String, participants: String = "coordinator") {
+        viewModelScope.launch { runtime.createConversation(title, participants) }
+    }
+
+    fun send(conversationId: String, text: String, agentId: String = "coordinator") {
+        if (text.isBlank()) return
+        viewModelScope.launch { runtime.send(conversationId, text.trim(), agentId) }
+    }
+
+    fun setApiKey(provider: String, value: String) {
+        val key = when (provider) {
+            "OpenAI" -> "openai_api_key"
+            "DeepSeek" -> "deepseek_api_key"
+            "Claude" -> "anthropic_api_key"
+            "Gemini" -> "gemini_api_key"
+            else -> return
+        }
+        if (value.isNotBlank()) store.put(key, value.trim())
+    }
+
+    fun addMemory(key: String, value: String) {
+        if (key.isBlank() || value.isBlank()) return
+        viewModelScope.launch {
+            db.memories().upsert(
+                MemoryEntity(
+                    id = key.trim().lowercase(),
+                    scope = "global",
+                    key = key.trim(),
+                    value = value.trim(),
+                    importance = 70
+                )
+            )
+        }
+    }
+
+    fun conversationById(id: String) = conversations.value.firstOrNull { it.id == id }
+}
