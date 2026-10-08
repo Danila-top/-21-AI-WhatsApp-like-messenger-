@@ -88,6 +88,41 @@ class ToolRegistry {
         )
     )
 
+    fun asResponsesTools(): JSONArray = JSONArray().apply {
+        definitions().forEach { tool ->
+            put(
+                JSONObject()
+                    .put("type", "function")
+                    .put("name", tool.name)
+                    .put("description", tool.description)
+                    .put("parameters", tool.parameters)
+                    .put("strict", true)
+            )
+        }
+    }
+
+    fun asAnthropicTools(): JSONArray = JSONArray().apply {
+        definitions().forEach { tool ->
+            put(
+                JSONObject()
+                    .put("name", tool.name)
+                    .put("description", tool.description)
+                    .put("input_schema", tool.parameters)
+            )
+        }
+    }
+
+    fun asGeminiFunctionDeclarations(): JSONArray = JSONArray().apply {
+        definitions().forEach { tool ->
+            put(
+                JSONObject()
+                    .put("name", tool.name)
+                    .put("description", tool.description)
+                    .put("parameters", tool.parameters)
+            )
+        }
+    }
+
     fun asOpenAITools(): JSONArray = JSONArray().apply {
         definitions().forEach { tool ->
             put(
