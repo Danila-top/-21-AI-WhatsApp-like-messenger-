@@ -23,7 +23,7 @@ class AiTaskWorker(
 
         if (!task.enabled) return Result.success()
 
-        return runCatching {
+        return try {
             val conversationId = task.conversationId
                 ?: error("Scheduled AI task has no conversation.")
             val runtime = AgentRuntime(
@@ -33,9 +33,9 @@ class AiTaskWorker(
             )
             runtime.runScheduledTask(conversationId, task.prompt)
             db.tasks().setEnabled(task.id, false)
-        }.fold(
-            onSuccess = { Result.success() },
-            onFailure = { Result.retry() }
-        )
+            Result.success()
+        } catch (e: Throwable) {
+            Result.retry()
+        }
     }
 }
