@@ -105,3 +105,13 @@ data class AgentProfileEntity(
     val enabled: Boolean = true,
     val updatedAt: Long = System.currentTimeMillis()
 )
+
+
+@Entity(tableName = "tool_permissions")
+data class ToolPermissionEntity(
+    @PrimaryKey val id: String,
+    val conversationId: String?,
+    val toolName: String,
+    val mode: String = "CONFIRM",
+    val updatedAt: Long = System.currentTimeMillis()
+)
