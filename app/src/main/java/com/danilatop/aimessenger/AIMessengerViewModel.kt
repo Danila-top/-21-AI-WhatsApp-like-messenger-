@@ -13,11 +13,15 @@ import java.util.UUID
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 class AIMessengerViewModel(app: Application) : AndroidViewModel(app) {
     private val db = AppDatabase.get(app)
     private val store = SecureStore(app)
     private val runtime = AgentRuntime(app, db, AIProvider(store))
+    private val _streamingText = MutableStateFlow("")
+    val streamingText = _streamingText.asStateFlow()
 
     val conversations = db.conversations().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -45,6 +49,17 @@ class AIMessengerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun newChat(title: String, participants: String = "coordinator") {
         viewModelScope.launch { runtime.createConversation(title, participants) }
+    }
+
+    fun sendStreaming(conversationId: String, text: String, agentId: String = "coordinator") {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            _streamingText.value = ""
+            runtime.stream(conversationId, text.trim(), agentId) { delta ->
+                _streamingText.value += delta
+            }
+            _streamingText.value = ""
+        }
     }
 
     fun send(conversationId: String, text: String, agentId: String = "coordinator") {
