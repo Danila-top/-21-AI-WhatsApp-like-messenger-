@@ -50,6 +50,9 @@ interface ActivityDao {
     @Query("SELECT * FROM activity_log ORDER BY createdAt DESC LIMIT 200")
     fun observeAll(): Flow<List<ActivityLogEntity>>
 
+    @Query("SELECT * FROM activity_log WHERE conversationId = :conversationId ORDER BY createdAt DESC LIMIT 300")
+    fun observeForConversation(conversationId: String): Flow<List<ActivityLogEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(item: ActivityLogEntity)
 }
@@ -68,6 +71,9 @@ interface ScheduledTaskDao {
     @Query("SELECT * FROM scheduled_tasks ORDER BY nextRunAt ASC")
     fun observeAll(): Flow<List<ScheduledTaskEntity>>
 
+    @Query("SELECT * FROM scheduled_tasks WHERE conversationId = :conversationId ORDER BY nextRunAt ASC")
+    fun observeForConversation(conversationId: String): Flow<List<ScheduledTaskEntity>>
+
     @Query("SELECT * FROM scheduled_tasks WHERE id = :id LIMIT 1")
     suspend fun get(id: String): ScheduledTaskEntity?
 
@@ -82,6 +88,9 @@ interface ScheduledTaskDao {
 interface ToolApprovalDao {
     @Query("SELECT * FROM tool_approvals WHERE status = 'PENDING' ORDER BY createdAt DESC")
     fun observePending(): Flow<List<ToolApprovalEntity>>
+
+    @Query("SELECT * FROM tool_approvals WHERE conversationId = :conversationId ORDER BY createdAt DESC")
+    fun observeForConversation(conversationId: String): Flow<List<ToolApprovalEntity>>
 
     @Query("SELECT * FROM tool_approvals WHERE id = :id LIMIT 1")
     suspend fun get(id: String): ToolApprovalEntity?
