@@ -23,6 +23,9 @@ interface ConversationDao {
 
 @Dao
 interface MessageDao {
+    @Query("SELECT * FROM messages ORDER BY createdAt ASC")
+    fun observeAll(): Flow<List<MessageEntity>>
+
     @Query("SELECT * FROM messages WHERE conversationId = :conversationId ORDER BY createdAt ASC")
     fun observeForConversation(conversationId: String): Flow<List<MessageEntity>>
 
@@ -59,6 +62,9 @@ interface ActivityDao {
 
 @Dao
 interface WorkspaceFileDao {
+    @Query("SELECT * FROM workspace_files ORDER BY name ASC")
+    fun observeAll(): Flow<List<WorkspaceFileEntity>>
+
     @Query("SELECT * FROM workspace_files WHERE conversationId = :conversationId ORDER BY name ASC")
     fun observeForConversation(conversationId: String): Flow<List<WorkspaceFileEntity>>
 
@@ -72,6 +78,7 @@ interface WorkspaceFileDao {
 @Dao
 interface ScheduledTaskDao {
     @Query("SELECT * FROM scheduled_tasks ORDER BY nextRunAt ASC")
+    fun observeAll(): Flow<List<ScheduledTaskEntity>>
     fun observeAll(): Flow<List<ScheduledTaskEntity>>
 
     @Query("SELECT * FROM scheduled_tasks WHERE conversationId = :conversationId ORDER BY nextRunAt ASC")
