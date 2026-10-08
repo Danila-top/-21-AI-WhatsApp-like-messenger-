@@ -1,5 +1,8 @@
 package com.danilatop.aimessenger.tools
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import com.danilatop.aimessenger.data.AppDatabase
 import com.danilatop.aimessenger.data.MemoryEntity
 import com.danilatop.aimessenger.data.ScheduledTaskEntity
@@ -27,7 +30,7 @@ data class ToolExecution(
     val approvalId: String? = null
 )
 
-class ToolRegistry {
+class ToolRegistry(private val context: Context? = null) {
     fun definitions(): List<ToolDefinition> = listOf(
         ToolDefinition(
             "calculator",
@@ -134,6 +137,46 @@ class ToolRegistry {
                     .put("description", tool.description)
                     .put("parameters", tool.parameters)
                     .put("strict", true)
+            )
+        }
+    }
+
+    suspend fun executeApproved(call: ToolCall): ToolExecution {
+        require(call.name == "request_external_action") {
+            "Tool does not support local approval execution."
+        }
+
+        val action = call.arguments.getString("action").trim()
+        val details = call.arguments.getString("details").trim()
+        val appContext = context ?: error("Android context is unavailable.")
+
+        return when (action.lowercase()) {
+            "open_url" -> {
+                val uri = runCatching { Uri.parse(details) }
+                    .getOrElse { error("Некорректный URL.") }
+                require(uri.scheme == "http" || uri.scheme == "https") {
+                    "Разрешены только HTTP/HTTPS URL."
+                }
+                val intent = Intent(Intent.ACTION_VIEW, uri)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                appContext.startActivity(intent)
+                ToolExecution("Opened URL: " + uri)
+            }
+
+            "share_text" -> {
+                val intent = Intent(Intent.ACTION_SEND)
+                    .setType("text/plain")
+                    .putExtra(Intent.EXTRA_TEXT, details)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                appContext.startActivity(
+                    Intent.createChooser(intent, "Поделиться").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+                ToolExecution("Share sheet opened.")
+            }
+
+            else -> ToolExecution(
+                "Action blocked: " + action +
+                    ". Allowed actions: open_url, share_text."
             )
         }
     }
