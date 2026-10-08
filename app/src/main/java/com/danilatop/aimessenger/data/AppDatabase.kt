@@ -15,9 +15,10 @@ import androidx.room.RoomDatabase
         ScheduledTaskEntity::class,
         ToolApprovalEntity::class,
         McpServerEntity::class,
-        AgentProfileEntity::class
+        AgentProfileEntity::class,
+        ToolPermissionEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -30,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun approvals(): ToolApprovalDao
     abstract fun mcpServers(): McpServerDao
     abstract fun agentProfiles(): AgentProfileDao
+    abstract fun toolPermissions(): ToolPermissionDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
