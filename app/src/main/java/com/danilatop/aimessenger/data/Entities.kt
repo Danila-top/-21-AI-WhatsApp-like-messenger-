@@ -48,3 +48,35 @@ data class ActivityLogEntity(
     val details: String,
     val createdAt: Long = System.currentTimeMillis()
 )
+
+@Entity(tableName = "workspace_files")
+data class WorkspaceFileEntity(
+    @PrimaryKey val id: String,
+    val conversationId: String,
+    val name: String,
+    val content: String,
+    val mimeType: String = "text/plain",
+    val updatedAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "scheduled_tasks")
+data class ScheduledTaskEntity(
+    @PrimaryKey val id: String,
+    val conversationId: String?,
+    val title: String,
+    val prompt: String,
+    val nextRunAt: Long,
+    val enabled: Boolean = true,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Entity(tableName = "tool_approvals")
+data class ToolApprovalEntity(
+    @PrimaryKey val id: String,
+    val conversationId: String,
+    val toolName: String,
+    val arguments: String,
+    val status: String = "PENDING",
+    val createdAt: Long = System.currentTimeMillis(),
+    val resolvedAt: Long? = null
+)
