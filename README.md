@@ -100,16 +100,18 @@ OpenAI DeepSeek Claude Gemini
 
 ## Сборка
 
-Android Studio + Android SDK 36:
+Открой проект в Android Studio с Android SDK 36 и выполни Gradle Sync.
+
+После генерации Gradle Wrapper сборка запускается так:
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-Windows:
+Либо используй установленный Gradle:
 
-```powershell
-gradlew.bat :app:assembleDebug
+```bash
+gradle :app:assembleDebug
 ```
 
 ## Статус
