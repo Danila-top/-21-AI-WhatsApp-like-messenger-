@@ -47,6 +47,17 @@ class AIMessengerViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch { runtime.send(conversationId, text.trim(), agentId) }
     }
 
+    fun setAutonomous(conversationId: String, enabled: Boolean) {
+        viewModelScope.launch {
+            val current = db.conversations().get(conversationId) ?: return@launch
+            db.conversations().setAutonomous(
+                conversationId,
+                enabled,
+                System.currentTimeMillis()
+            )
+        }
+    }
+
     fun setApiKey(provider: String, value: String) {
         val key = when (provider) {
             "OpenAI" -> "openai_api_key"
