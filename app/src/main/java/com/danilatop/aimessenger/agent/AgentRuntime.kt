@@ -2,6 +2,7 @@ package com.danilatop.aimessenger.agent
 
 import android.content.Context
 import com.danilatop.aimessenger.ai.AIProvider
+import com.danilatop.aimessenger.ai.AgentProfileCatalog
 import com.danilatop.aimessenger.ai.AgentSpec
 import com.danilatop.aimessenger.ai.ChatTurn
 import com.danilatop.aimessenger.ai.DefaultAgents
@@ -37,11 +38,15 @@ class AgentRuntime(
         agentsCsv: String = "coordinator"
     ): String {
         val id = UUID.randomUUID().toString()
+        val availableAgents = agents()
         db.conversations().upsert(
             ConversationEntity(
                 id = id,
                 title = title,
-                participantAgentIds = sanitizeParticipants(agentsCsv)
+                participantAgentIds = sanitizeParticipants(
+                    agentsCsv,
+                    availableAgents.keys
+                )
             )
         )
         log(id, "system", "conversation.created", "participants=" + agentsCsv)
@@ -420,10 +425,13 @@ class AgentRuntime(
         )
     }
 
-    private fun sanitizeParticipants(csv: String): String =
+    private fun sanitizeParticipants(
+        csv: String,
+        availableAgentIds: Set<String>
+    ): String =
         csv.split(",")
             .map { it.trim() }
-            .filter { agents.containsKey(it) }
+            .filter { availableAgentIds.contains(it) }
             .distinct()
             .ifEmpty { listOf("coordinator") }
             .joinToString(",")
