@@ -57,6 +57,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.danilatop.aimessenger.data.MessageEntity
 import com.danilatop.aimessenger.ui.ChatWorkspaceScreen
+import com.danilatop.aimessenger.ui.AgentProfilesScreen
 
 class MainActivity : ComponentActivity() {
     private val vm by viewModels<AIMessengerViewModel>()
@@ -396,6 +397,7 @@ private fun SettingsScreen(
     onBack: () -> Unit
 ) {
     var openAi by remember { mutableStateOf("") }
+    var agentProfilesOpen by remember { mutableStateOf(false) }
     var deepSeek by remember { mutableStateOf("") }
     var claude by remember { mutableStateOf("") }
     var gemini by remember { mutableStateOf("") }
@@ -421,6 +423,14 @@ private fun SettingsScreen(
             Modifier.fillMaxSize().padding(padding),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            item {
+                FilledTonalButton(
+                    onClick = { agentProfilesOpen = true },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) {
+                    Text("Настроить AI-агентов")
+                }
+            }
             item {
                 Text(
                     "Провайдеры",
@@ -577,6 +587,13 @@ private fun SettingsScreen(
                 )
             }
         }
+    }
+
+    if (agentProfilesOpen) {
+        AgentProfilesScreen(
+            vm = vm,
+            onBack = { agentProfilesOpen = false }
+        )
     }
 }
 
