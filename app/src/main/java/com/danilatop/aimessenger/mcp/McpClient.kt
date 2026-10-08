@@ -8,7 +8,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
-import java.util.UUID
 
 data class McpTool(
     val name: String,
@@ -144,9 +143,6 @@ class McpClient(
 
         sessionId?.let { builder.addHeader("MCP-Session-Id", it) }
         builder.addHeader("MCP-Protocol-Version", "2025-11-25")
-        builder.addHeader("Mcp-Method", method)
-        builder.addHeader("Mcp-Name", if (method == "tools/call") params.optString("name") else "ai-messenger-21")
-        builder.addHeader("X-Request-Id", UUID.randomUUID().toString())
 
         client.newCall(builder.build()).execute().use { response ->
             val responseSession = response.header("Mcp-Session-Id")
