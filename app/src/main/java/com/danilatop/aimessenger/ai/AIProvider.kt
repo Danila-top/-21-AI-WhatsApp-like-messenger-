@@ -115,10 +115,13 @@ class AIProvider(private val secureStore: SecureStore) {
             val calls = parseOpenAiResponsesCalls(output)
             if (calls.isEmpty()) return extractOpenAiOutputText(output)
 
-            val toolResults = JSONArray()
+            val nextInput = JSONArray()
+            for (i in 0 until output.length()) {
+                nextInput.put(output.get(i))
+            }
             for (call in calls) {
                 val result = runTool(call, execute)
-                toolResults.put(
+                nextInput.put(
                     JSONObject()
                         .put("type", "function_call_output")
                         .put("call_id", call.id)
@@ -131,8 +134,8 @@ class AIProvider(private val secureStore: SecureStore) {
                 "Bearer " + key,
                 JSONObject()
                     .put("model", agent.model)
-                    .put("previous_response_id", response.getString("id"))
-                    .put("input", toolResults)
+                    .put("instructions", agent.systemPrompt)
+                    .put("input", nextInput)
                     .put("tools", tools.toResponsesJson())
                     .put("store", false)
                     .toString()
@@ -220,7 +223,7 @@ class AIProvider(private val secureStore: SecureStore) {
         for (round in 0 until maxRounds) {
             val response = postJson(
                 agent.baseUrl.trimEnd('/') + "/v1/messages",
-                key,
+                null,
                 JSONObject()
                     .put("model", agent.model)
                     .put("max_tokens", 4096)
@@ -432,7 +435,7 @@ class AIProvider(private val secureStore: SecureStore) {
 
         val response = postJson(
             agent.baseUrl.trimEnd('/') + "/v1/messages",
-            key,
+            null,
             JSONObject()
                 .put("model", agent.model)
                 .put("max_tokens", 4096)
@@ -454,7 +457,7 @@ class AIProvider(private val secureStore: SecureStore) {
         val input = turns.joinToString("\n") { it.role + ": " + it.content }
         val response = postJson(
             agent.baseUrl.trimEnd('/') + "/v1beta/interactions",
-            key,
+            null,
             JSONObject()
                 .put("model", agent.model)
                 .put("input", agent.systemPrompt + "\n\n" + input)
