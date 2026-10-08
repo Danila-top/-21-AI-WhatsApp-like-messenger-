@@ -110,7 +110,7 @@ class AIProvider(private val secureStore: SecureStore) {
                 .toString()
         )
 
-        repeat(maxRounds) {
+        for (round in 0 until maxRounds) {
             val output = response.optJSONArray("output") ?: JSONArray()
             val calls = parseOpenAiResponsesCalls(output)
             if (calls.isEmpty()) return extractOpenAiOutputText(output)
@@ -154,7 +154,7 @@ class AIProvider(private val secureStore: SecureStore) {
         messages.put(JSONObject().put("role", "system").put("content", agent.systemPrompt))
         turns.forEach { messages.put(JSONObject().put("role", it.role).put("content", it.content)) }
 
-        repeat(maxRounds) {
+        for (round in 0 until maxRounds) {
             val response = postJson(
                 agent.baseUrl.trimEnd('/') + "/v1/chat/completions",
                 "Bearer " + key,
@@ -217,7 +217,7 @@ class AIProvider(private val secureStore: SecureStore) {
             )
         }
 
-        repeat(maxRounds) {
+        for (round in 0 until maxRounds) {
             val response = postJson(
                 agent.baseUrl.trimEnd('/') + "/v1/messages",
                 key,
@@ -266,7 +266,7 @@ class AIProvider(private val secureStore: SecureStore) {
         var input: Any = turns.joinToString("\n") { it.role + ": " + it.content }
         var previousId: String? = null
 
-        repeat(maxRounds) {
+        for (round in 0 until maxRounds) {
             val body = JSONObject()
                 .put("model", agent.model)
                 .put("input", input)
