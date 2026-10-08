@@ -145,7 +145,8 @@ class AgentRuntime(
     private suspend fun oneAgent(
         conversationId: String,
         input: String,
-        agent: AgentSpec
+        agent: AgentSpec,
+        delegationDepth: Int = 0
     ): String {
         log(conversationId, agent.id, "agent.thinking", "model=" + agent.model)
         val history = db.messages().recent(conversationId, 20).reversed()
@@ -172,10 +173,13 @@ class AgentRuntime(
             turns = turns,
             tools = availableTools,
             execute = { call ->
-                val result = if (call.name.startsWith("mcp_")) {
-                    executeMcpWithPermission(conversationId, call)
-                } else {
-                    tools.execute(db, conversationId, call)
+                val result = when {
+                    call.name.startsWith("mcp_") ->
+                        executeMcpWithPermission(conversationId, call)
+                    call.name == "delegate_to_agent" ->
+                        delegateToAgent(conversationId, call, delegationDepth)
+                    else ->
+                        tools.execute(db, conversationId, call)
                 }
                 log(
                     conversationId,
@@ -189,6 +193,37 @@ class AgentRuntime(
         saveAssistant(conversationId, agent.id, answer)
         log(conversationId, agent.id, "agent.completed", "chars=" + answer.length)
         return answer
+    }
+
+    private suspend fun delegateToAgent(
+        conversationId: String,
+        call: ToolCall,
+        depth: Int
+    ): ToolExecution {
+        if (depth >= 2) {
+            return ToolExecution("Delegation depth limit reached.")
+        }
+
+        val targetId = call.arguments.getString("agent_id").trim()
+        val prompt = call.arguments.getString("prompt").trim()
+        require(targetId.isNotBlank()) { "agent_id is empty." }
+        require(prompt.isNotBlank()) { "prompt is empty." }
+
+        val target = agents()[targetId]
+            ?: return ToolExecution("Agent not available: " + targetId)
+
+        log(conversationId, target.id, "agent.delegated", prompt.take(500))
+
+        val answer = oneAgent(
+            conversationId = conversationId,
+            input = "[DELEGATED SUBTASK]\n" + prompt,
+            agent = target,
+            delegationDepth = depth + 1
+        )
+
+        return ToolExecution(
+            "Delegated result from " + target.name + ":\n" + answer
+        )
     }
 
     private suspend fun executeMcpWithPermission(
