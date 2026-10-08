@@ -215,6 +215,7 @@ private fun ChatScreen(
     onBack: () -> Unit
 ) {
     val messages by vm.messages(conversationId).collectAsState()
+    val streaming by vm.streamingText.collectAsState()
     val conversation = vm.conversationById(conversationId)
     var input by remember { mutableStateOf("") }
     var agent by remember { mutableStateOf("coordinator") }
@@ -278,6 +279,15 @@ private fun ChatScreen(
                             Text(if (conversation?.autonomous == true) "AUTO ON" else "AUTO")
                         }
                     )
+                    AssistChip(
+                        onClick = {
+                            if (input.isNotBlank()) {
+                                vm.sendStreaming(conversationId, input, agent)
+                                input = ""
+                            }
+                        },
+                        label = { Text("STREAM") }
+                    )
                 }
 
                 Row(
@@ -326,6 +336,25 @@ private fun ChatScreen(
                 }
             }
             items(messages, key = { it.id }) { MessageBubble(it) }
+            if (streaming.isNotBlank()) {
+                item {
+                    Surface(
+                        tonalElevation = 5.dp,
+                        shape = MaterialTheme.shapes.large,
+                        modifier = Modifier.fillMaxWidth(0.90f).padding(horizontal = 12.dp)
+                    ) {
+                        Column(Modifier.padding(12.dp)) {
+                            Text(
+                                "streaming…",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(Modifier.height(4.dp))
+                            Text(streaming)
+                        }
+                    }
+                }
+            }
         }
     }
 }
