@@ -83,6 +83,9 @@ interface ToolApprovalDao {
     @Query("SELECT * FROM tool_approvals WHERE status = 'PENDING' ORDER BY createdAt DESC")
     fun observePending(): Flow<List<ToolApprovalEntity>>
 
+    @Query("SELECT * FROM tool_approvals WHERE id = :id LIMIT 1")
+    suspend fun get(id: String): ToolApprovalEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: ToolApprovalEntity)
 }
