@@ -27,7 +27,7 @@ object DefaultAgents {
         id = "coordinator",
         name = "Luna",
         provider = ProviderKind.OPENAI,
-        model = "gpt-5.6",
+        model = "gpt-5.6-luna",
         baseUrl = "https://api.openai.com",
         keyName = "openai_api_key",
         systemPrompt = "You are the coordinator of an AI-first messenger. Be precise, explicit about uncertainty, and delegate complex work when useful."
@@ -37,7 +37,7 @@ object DefaultAgents {
         id = "deepseek",
         name = "DeepSeek",
         provider = ProviderKind.DEEPSEEK,
-        model = "deepseek-chat",
+        model = "deepseek-flash",
         baseUrl = "https://api.deepseek.com",
         keyName = "deepseek_api_key",
         systemPrompt = "You are the engineering and reasoning specialist. Prefer concrete technical solutions and verifiable steps."
@@ -47,7 +47,7 @@ object DefaultAgents {
         id = "claude",
         name = "Claude",
         provider = ProviderKind.ANTHROPIC,
-        model = "claude-sonnet-4-5",
+        model = "claude-sonnet-4-6",
         baseUrl = "https://api.anthropic.com",
         keyName = "anthropic_api_key",
         systemPrompt = "You are the critic and synthesis specialist. Challenge assumptions and improve quality without being vague."
@@ -57,7 +57,7 @@ object DefaultAgents {
         id = "gemini",
         name = "Gemini",
         provider = ProviderKind.GEMINI,
-        model = "gemini-2.5-flash",
+        model = "gemini-3.8-flash",
         baseUrl = "https://generativelanguage.googleapis.com",
         keyName = "gemini_api_key",
         systemPrompt = "You are a research and multimodal specialist. Structure evidence and distinguish facts from hypotheses."
@@ -85,6 +85,54 @@ class AIProvider(private val secureStore: SecureStore) {
                 ProviderKind.GEMINI -> gemini(agent, key, turns)
             }
         }
+
+    private fun openAiResponses(agent: AgentSpec, key: String, turns: List<ChatTurn>): String {
+        val input = JSONArray()
+        turns.forEach {
+            input.put(
+                JSONObject()
+                    .put("role", it.role)
+                    .put("content", it.content)
+            )
+        }
+
+        val body = JSONObject()
+            .put("model", agent.model)
+            .put("instructions", agent.systemPrompt)
+            .put("input", input)
+            .put("store", false)
+            .toString()
+
+        val url = agent.baseUrl.trimEnd('/') + "/v1/responses"
+        val request = Request.Builder()
+            .url(url)
+            .addHeader("Authorization", "Bearer " + key)
+            .post(body.toRequestBody(jsonType))
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                error("HTTP " + response.code + ": " + text)
+            }
+
+            val output = JSONObject(text).optJSONArray("output") ?: JSONArray()
+            val answer = StringBuilder()
+            for (i in 0 until output.length()) {
+                val item = output.optJSONObject(i) ?: continue
+                if (item.optString("type") != "message") continue
+                val content = item.optJSONArray("content") ?: continue
+                for (j in 0 until content.length()) {
+                    val part = content.optJSONObject(j) ?: continue
+                    if (part.optString("type") == "output_text") {
+                        answer.append(part.optString("text"))
+                    }
+                }
+            }
+            require(answer.isNotBlank()) { "OpenAI Responses API вернул пустой текстовый ответ." }
+            return answer.toString()
+        }
+    }
 
     private fun openAiStyle(agent: AgentSpec, key: String, turns: List<ChatTurn>): String {
         val messages = JSONArray().apply {
