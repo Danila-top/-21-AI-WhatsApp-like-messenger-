@@ -48,6 +48,7 @@ class McpClient(
                 )
         )
         sessionId = result.second
+        notifyInitialized()
         result.first.getJSONObject("result")
     }
 
@@ -99,6 +100,32 @@ class McpClient(
                 isError = result.optBoolean("isError", false)
             )
         }
+
+    private fun notifyInitialized() {
+        val rpc = JSONObject()
+            .put("jsonrpc", "2.0")
+            .put("method", "notifications/initialized")
+            .put("params", JSONObject())
+
+        val builder = Request.Builder()
+            .url(endpoint)
+            .addHeader("Accept", "application/json, text/event-stream")
+            .post(rpc.toString().toRequestBody(mediaType))
+
+        headers.forEach { (name, value) -> builder.addHeader(name, value) }
+        sessionId?.let { builder.addHeader("MCP-Session-Id", it) }
+        builder.addHeader("MCP-Protocol-Version", "2025-11-25")
+        builder.addHeader("Mcp-Method", "notifications/initialized")
+
+        client.newCall(builder.build()).execute().use { response ->
+            if (!response.isSuccessful && response.code != 202) {
+                error(
+                    "MCP initialized notification failed: " +
+                        response.code + ": " + response.body?.string().orEmpty()
+                )
+            }
+        }
+    }
 
     private fun request(method: String, params: JSONObject): Pair<JSONObject, String?> {
         val requestId = nextId++
