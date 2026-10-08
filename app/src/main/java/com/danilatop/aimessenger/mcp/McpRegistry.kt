@@ -1,6 +1,7 @@
 package com.danilatop.aimessenger.mcp
 
 import com.danilatop.aimessenger.data.AppDatabase
+import com.danilatop.aimessenger.data.ToolApprovalEntity
 import com.danilatop.aimessenger.security.SecureStore
 import com.danilatop.aimessenger.tools.ToolCall
 import com.danilatop.aimessenger.tools.ToolDefinition
@@ -14,25 +15,27 @@ class McpRegistry(
     private val clients = mutableMapOf<String, McpClient>()
 
     private suspend fun client(serverId: String): McpClient {
-        return clients.getOrPut(serverId) {
-            val server = requireNotNull(runBlockingServer(serverId)) {
-                "MCP server not found: " + serverId
-            }
-            val token = server.tokenKeyName?.let { secureStore.get(it) }
-            val headers = if (token.isNullOrBlank()) {
-                emptyMap()
-            } else {
-                mapOf("Authorization" to "Bearer " + token)
-            }
-            McpClient(server.endpoint, headers)
-        }
-    }
+        clients[serverId]?.let { return it }
 
-    private suspend fun runBlockingServer(serverId: String) =
-        db.mcpServers().get(serverId)
+        val server = db.mcpServers().get(serverId)
+            ?: error("MCP server not found: " + serverId)
+
+        val token = server.tokenKeyName?.let { secureStore.get(it) }
+        val headers = if (token.isNullOrBlank()) {
+            emptyMap()
+        } else {
+            mapOf("Authorization" to "Bearer " + token)
+        }
+
+        val created = McpClient(server.endpoint, headers)
+        created.initialize()
+        clients[serverId] = created
+        return created
+    }
 
     suspend fun definitions(): List<ToolDefinition> {
         val result = mutableListOf<ToolDefinition>()
+
         for (server in db.mcpServers().enabled()) {
             runCatching {
                 val tools = client(server.id).listTools()
@@ -46,11 +49,16 @@ class McpRegistry(
                 }
             }
         }
+
         return result
     }
 
-    suspend fun execute(conversationId: String, call: ToolCall): ToolExecution {
+    suspend fun execute(
+        conversationId: String,
+        call: ToolCall
+    ): ToolExecution {
         require(call.name.startsWith("mcp_")) { "Not an MCP tool." }
+
         val encoded = call.name.removePrefix("mcp_")
         val split = encoded.split("__", limit = 2)
         require(split.size == 2) { "Invalid MCP tool name." }
@@ -61,8 +69,9 @@ class McpRegistry(
             ?: return ToolExecution("MCP server not found: " + serverId)
 
         val approvalId = "mcp-" + java.util.UUID.randomUUID().toString()
+
         db.approvals().upsert(
-            com.danilatop.aimessenger.data.ToolApprovalEntity(
+            ToolApprovalEntity(
                 id = approvalId,
                 conversationId = conversationId,
                 toolName = call.name,
@@ -72,10 +81,10 @@ class McpRegistry(
         )
 
         return ToolExecution(
-            "Human approval required before MCP call. approval_id=" + approvalId +
+            output = "Human approval required before MCP call. approval_id=" + approvalId +
                 " server=" + server.name + " tool=" + toolName,
-            true,
-            approvalId
+            requiresApproval = true,
+            approvalId = approvalId
         )
     }
 
@@ -87,7 +96,11 @@ class McpRegistry(
         val serverId = split[0]
         val toolName = split[1]
         val result = client(serverId).callTool(toolName, call.arguments)
-        return ToolExecution(result.text, result.isError)
+
+        return ToolExecution(
+            output = result.text,
+            requiresApproval = false
+        )
     }
 
     private fun mcpName(serverId: String, toolName: String): String =
