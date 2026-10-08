@@ -62,6 +62,9 @@ interface WorkspaceFileDao {
     @Query("SELECT * FROM workspace_files WHERE conversationId = :conversationId ORDER BY name ASC")
     fun observeForConversation(conversationId: String): Flow<List<WorkspaceFileEntity>>
 
+    @Query("SELECT * FROM workspace_files WHERE conversationId = :conversationId AND name = :name LIMIT 1")
+    suspend fun get(conversationId: String, name: String): WorkspaceFileEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: WorkspaceFileEntity)
 }
