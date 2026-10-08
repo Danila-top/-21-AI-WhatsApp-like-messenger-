@@ -68,6 +68,12 @@ interface ScheduledTaskDao {
     @Query("SELECT * FROM scheduled_tasks ORDER BY nextRunAt ASC")
     fun observeAll(): Flow<List<ScheduledTaskEntity>>
 
+    @Query("SELECT * FROM scheduled_tasks WHERE id = :id LIMIT 1")
+    suspend fun get(id: String): ScheduledTaskEntity?
+
+    @Query("UPDATE scheduled_tasks SET enabled = :enabled WHERE id = :id")
+    suspend fun setEnabled(id: String, enabled: Boolean)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: ScheduledTaskEntity)
 }
