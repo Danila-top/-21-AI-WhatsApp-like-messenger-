@@ -7,6 +7,7 @@ lifecycle = "2.8.7"
 room = "2.7.0"
 coreKtx = "1.18.0"
 okhttp = "4.10.0"
+ksp = "2.2.10-2.0.2"
 workManager = "2.12.0"
 
 [libraries]
@@ -30,4 +31,4 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhtt
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "2.3.5" }
+google-devtools-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
