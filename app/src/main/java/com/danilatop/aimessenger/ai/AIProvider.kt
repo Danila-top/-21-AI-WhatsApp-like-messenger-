@@ -86,6 +86,31 @@ class AIProvider(private val secureStore: SecureStore) {
         }
     }
 
+    suspend fun streamText(
+        agent: AgentSpec,
+        turns: List<ChatTurn>,
+        onDelta: suspend (String) -> Unit
+    ): String = withContext(Dispatchers.IO) {
+        val key = apiKey(agent)
+        when (agent.provider) {
+            ProviderKind.OPENAI,
+            ProviderKind.DEEPSEEK,
+            ProviderKind.OPENAI_COMPATIBLE -> {
+                AiStreamingClient(client).streamOpenAiCompatible(
+                    agent = agent,
+                    apiKey = key,
+                    turns = turns,
+                    onDelta = onDelta
+                )
+            }
+            else -> {
+                val text = generate(agent, turns)
+                onDelta(text)
+                text
+            }
+        }
+    }
+
     private fun apiKey(agent: AgentSpec): String =
         secureStore.get(agent.keyName)
             ?: error("Нет API-ключа для " + agent.name + ". Открой Настройки → Провайдеры.")
