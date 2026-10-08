@@ -166,7 +166,7 @@ class AgentRuntime(
             tools = availableTools,
             execute = { call ->
                 val result = if (call.name.startsWith("mcp_")) {
-                    mcp.execute(conversationId, call)
+                    executeMcpWithPermission(conversationId, call)
                 } else {
                     tools.execute(db, conversationId, call)
                 }
@@ -182,6 +182,20 @@ class AgentRuntime(
         saveAssistant(conversationId, agent.id, answer)
         log(conversationId, agent.id, "agent.completed", "chars=" + answer.length)
         return answer
+    }
+
+    private suspend fun executeMcpWithPermission(
+        conversationId: String,
+        call: ToolCall
+    ): ToolExecution {
+        val permission = db.toolPermissions().get(conversationId, call.name)?.mode
+        return when (permission) {
+            "DENY" -> ToolExecution(
+                "MCP tool denied by this conversation's permission policy: " + call.name
+            )
+            "AUTO" -> mcp.executeApproved(call)
+            else -> mcp.execute(conversationId, call)
+        }
     }
 
     private suspend fun autonomousOneAgent(
