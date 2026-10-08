@@ -267,6 +267,17 @@ private fun ChatScreen(
                         onClick = { input = "/remember " },
                         label = { Text("MEMORY") }
                     )
+                    AssistChip(
+                        onClick = {
+                            vm.setAutonomous(
+                                conversationId,
+                                !(conversation?.autonomous ?: false)
+                            )
+                        },
+                        label = {
+                            Text(if (conversation?.autonomous == true) "AUTO ON" else "AUTO")
+                        }
+                    )
                 }
 
                 Row(
