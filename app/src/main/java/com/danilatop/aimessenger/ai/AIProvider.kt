@@ -304,7 +304,7 @@ class AIProvider(private val secureStore: SecureStore) {
 
             val response = postJson(
                 agent.baseUrl.trimEnd('/') + "/v1beta/interactions",
-                key,
+                null,
                 body.toString(),
                 mapOf("x-goog-api-key" to key)
             )
