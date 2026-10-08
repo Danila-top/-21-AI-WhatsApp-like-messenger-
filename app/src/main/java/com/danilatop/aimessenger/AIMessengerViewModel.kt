@@ -8,6 +8,8 @@ import com.danilatop.aimessenger.agent.AgentRuntime
 import com.danilatop.aimessenger.data.AppDatabase
 import com.danilatop.aimessenger.data.MemoryEntity
 import com.danilatop.aimessenger.security.SecureStore
+import com.danilatop.aimessenger.data.McpServerEntity
+import java.util.UUID
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -24,6 +26,9 @@ class AIMessengerViewModel(app: Application) : AndroidViewModel(app) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val activity = db.activity().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val mcpServers = db.mcpServers().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun messages(conversationId: String) =
@@ -55,6 +60,30 @@ class AIMessengerViewModel(app: Application) : AndroidViewModel(app) {
                 enabled,
                 System.currentTimeMillis()
             )
+        }
+    }
+
+    fun connectMcpServer(name: String, endpoint: String, token: String) {
+        if (name.isBlank() || endpoint.isBlank()) return
+        viewModelScope.launch {
+            val id = UUID.nameUUIDFromBytes(endpoint.trim().toByteArray()).toString()
+            val tokenKey = "mcp_token_" + id
+            if (token.isNotBlank()) store.put(tokenKey, token.trim())
+            db.mcpServers().upsert(
+                McpServerEntity(
+                    id = id,
+                    name = name.trim(),
+                    endpoint = endpoint.trim(),
+                    tokenKeyName = if (token.isBlank()) null else tokenKey,
+                    enabled = true
+                )
+            )
+        }
+    }
+
+    fun setMcpServerEnabled(id: String, enabled: Boolean) {
+        viewModelScope.launch {
+            db.mcpServers().setEnabled(id, enabled)
         }
     }
 
