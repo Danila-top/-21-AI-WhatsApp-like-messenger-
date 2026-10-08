@@ -56,6 +56,17 @@ class ToolRegistry(private val context: Context? = null) {
                 .put("additionalProperties", false)
         ),
         ToolDefinition(
+            "workspace_read",
+            "Read a text file from the current AI workspace.",
+            JSONObject()
+                .put("type", "object")
+                .put("properties", JSONObject().put(
+                    "name", JSONObject().put("type", "string")
+                ))
+                .put("required", JSONArray().put("name"))
+                .put("additionalProperties", false)
+        ),
+        ToolDefinition(
             "workspace_write",
             "Create or replace a text file in the current AI workspace.",
             JSONObject()
@@ -64,6 +75,28 @@ class ToolRegistry(private val context: Context? = null) {
                     .put("name", JSONObject().put("type", "string"))
                     .put("content", JSONObject().put("type", "string")))
                 .put("required", JSONArray().put("name").put("content"))
+                .put("additionalProperties", false)
+        ),
+        ToolDefinition(
+            "memory_search",
+            "Search long-term memory for matching keys or values.",
+            JSONObject()
+                .put("type", "object")
+                .put("properties", JSONObject().put(
+                    "query", JSONObject().put("type", "string")
+                ))
+                .put("required", JSONArray().put("query"))
+                .put("additionalProperties", false)
+        ),
+        ToolDefinition(
+            "delegate_to_agent",
+            "Ask another enabled AI agent to solve a subtask and return its result.",
+            JSONObject()
+                .put("type", "object")
+                .put("properties", JSONObject()
+                    .put("agent_id", JSONObject().put("type", "string"))
+                    .put("prompt", JSONObject().put("type", "string")))
+                .put("required", JSONArray().put("agent_id").put("prompt"))
                 .put("additionalProperties", false)
         ),
         ToolDefinition(
@@ -228,6 +261,13 @@ class ToolRegistry(private val context: Context? = null) {
                 ToolExecution("Memory saved: " + key)
             }
 
+            "workspace_read" -> {
+                val name = call.arguments.getString("name").trim()
+                val file = db.files().get(conversationId, name)
+                    ?: return ToolExecution("Workspace file not found: " + name)
+                ToolExecution(file.content)
+            }
+
             "workspace_write" -> {
                 val name = call.arguments.getString("name").trim()
                 val fileContent = call.arguments.getString("content")
@@ -241,6 +281,23 @@ class ToolRegistry(private val context: Context? = null) {
                     )
                 )
                 ToolExecution("Workspace file written: " + name)
+            }
+
+            "memory_search" -> {
+                val query = call.arguments.getString("query").trim().lowercase()
+                require(query.isNotBlank()) { "Query is empty." }
+                val matches = db.memories().recent(200)
+                    .filter {
+                        it.key.lowercase().contains(query) ||
+                            it.value.lowercase().contains(query)
+                    }
+                    .take(20)
+                ToolExecution(
+                    if (matches.isEmpty()) "No memory matches."
+                    else matches.joinToString("\n") {
+                        it.key + " = " + it.value
+                    }
+                )
             }
 
             "schedule_task" -> {
