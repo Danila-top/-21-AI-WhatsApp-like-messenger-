@@ -185,7 +185,12 @@ class ToolRegistry(private val context: Context? = null) {
         val definition = definitions().firstOrNull { it.name == call.name }
             ?: return ToolExecution("Unknown tool: " + call.name)
 
-        if (definition.risk == ToolRisk.CONFIRM) {
+        val permission = db.toolPermissions().get(conversationId, call.name)?.mode
+        if (permission == "DENY") {
+            return ToolExecution("Tool denied by this conversation's permission policy: " + call.name)
+        }
+
+        if (permission == "CONFIRM" || (permission == null && definition.risk == ToolRisk.CONFIRM)) {
             val approvalId = UUID.randomUUID().toString()
             db.approvals().upsert(
                 ToolApprovalEntity(
