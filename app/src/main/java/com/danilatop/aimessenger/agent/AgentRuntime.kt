@@ -31,7 +31,14 @@ class AgentRuntime(
     private val tools: ToolRegistry = ToolRegistry(context),
     private val mcp: McpRegistry = McpRegistry(db, SecureStore(context))
 ) {
-    private val agents = DefaultAgents.all.associateBy { it.id }
+    private suspend fun agents(): Map<String, AgentSpec> {
+        AgentProfileCatalog.ensureDefaults(db)
+        return db.agentProfiles()
+            .enabled()
+            .associate { profile ->
+                profile.id to AgentProfileCatalog.toSpec(profile)
+            }
+    }
 
     suspend fun createConversation(
         title: String = "Новый AI-чат",
@@ -115,13 +122,13 @@ class AgentRuntime(
                         autonomousOneAgent(
                             conversationId,
                             input,
-                            agents[agentId] ?: DefaultAgents.coordinator
+                            agents()[agentId] ?: DefaultAgents.coordinator
                         )
                     } else {
                         oneAgent(
                             conversationId,
                             input,
-                            agents[agentId] ?: DefaultAgents.coordinator
+                            agents()[agentId] ?: DefaultAgents.coordinator
                         )
                     }
                 }
@@ -211,6 +218,7 @@ class AgentRuntime(
 
     private suspend fun team(conversationId: String, input: String): String {
         val conversation = db.conversations().get(conversationId)
+        val agentMap = agents()
         val participantIds = conversation?.participantAgentIds
             ?.split(",")
             ?.map { it.trim() }
@@ -218,7 +226,7 @@ class AgentRuntime(
             ?: emptyList()
 
         val requested = participantIds
-            .mapNotNull { agents[it] }
+            .mapNotNull { agentMap[it] }
             .filter { it.id != DefaultAgents.coordinator.id }
             .ifEmpty { listOf(DefaultAgents.deepseek, DefaultAgents.claude, DefaultAgents.gemini) }
 
@@ -395,7 +403,7 @@ class AgentRuntime(
             turns += ChatTurn("user", input)
 
             val answer = provider.streamText(
-                agents[agentId] ?: DefaultAgents.coordinator,
+                agents()[agentId] ?: DefaultAgents.coordinator,
                 turns,
                 onDelta
             )
