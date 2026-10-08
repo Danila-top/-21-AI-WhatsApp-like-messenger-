@@ -91,3 +91,17 @@ data class McpServerEntity(
     val enabled: Boolean = true,
     val createdAt: Long = System.currentTimeMillis()
 )
+
+
+@Entity(tableName = "agent_profiles")
+data class AgentProfileEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val provider: String,
+    val model: String,
+    val baseUrl: String,
+    val keyName: String,
+    val systemPrompt: String,
+    val enabled: Boolean = true,
+    val updatedAt: Long = System.currentTimeMillis()
+)
