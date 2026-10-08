@@ -28,7 +28,7 @@ class AgentRuntime(
     private val context: Context,
     private val db: AppDatabase,
     private val provider: AIProvider,
-    private val tools: ToolRegistry = ToolRegistry(),
+    private val tools: ToolRegistry = ToolRegistry(context),
     private val mcp: McpRegistry = McpRegistry(db, SecureStore(context))
 ) {
     private val agents = DefaultAgents.all.associateBy { it.id }
@@ -321,20 +321,28 @@ class AgentRuntime(
             )
         )
 
-        if (status == "APPROVED" && existing.toolName.startsWith("mcp_")) {
+        if (status == "APPROVED") {
             val call = ToolCall(
                 id = existing.id,
                 name = existing.toolName,
                 arguments = JSONObject(existing.arguments)
             )
-            val result = mcp.executeApproved(call)
+
+            val result = if (existing.toolName.startsWith("mcp_")) {
+                mcp.executeApproved(call)
+            } else if (existing.toolName == "request_external_action") {
+                tools.executeApproved(call)
+            } else {
+                ToolExecution("Approved tool is not executable: " + existing.toolName)
+            }
+
             log(
                 conversationId,
                 "human",
                 "tool_approval.executed",
                 result.output.take(500)
             )
-            saveAssistant(conversationId, "mcp", result.output)
+            saveAssistant(conversationId, "tool", result.output)
             return result.output
         }
 
