@@ -262,8 +262,12 @@ class AgentRuntime(
 
         val requested = participantIds
             .mapNotNull { agentMap[it] }
-            .filter { it.id != DefaultAgents.coordinator.id }
-            .ifEmpty { listOf(DefaultAgents.deepseek, DefaultAgents.claude, DefaultAgents.gemini) }
+            .filter { it.id != "coordinator" }
+            .ifEmpty {
+                agentMap.values
+                    .filter { it.id != "coordinator" }
+                    .take(3)
+            }
 
         val reports = mutableListOf<String>()
         for (agent in requested) {
@@ -283,11 +287,12 @@ class AgentRuntime(
             append("\n\nOriginal task: ").append(input)
         }
 
+        val coordinator = agentMap["coordinator"] ?: DefaultAgents.coordinator
         val final = provider.generate(
-            DefaultAgents.coordinator,
+            coordinator,
             listOf(ChatTurn("user", synthesis))
         )
-        saveAssistant(conversationId, DefaultAgents.coordinator.id, final)
+        saveAssistant(conversationId, coordinator.id, final)
         log(
             conversationId,
             "coordinator",
