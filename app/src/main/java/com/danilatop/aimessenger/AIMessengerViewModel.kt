@@ -4,6 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.danilatop.aimessenger.ai.AIProvider
+import com.danilatop.aimessenger.ai.AgentProfileCatalog
+import com.danilatop.aimessenger.data.AgentProfileEntity
+import com.danilatop.aimessenger.data.ToolPermissionEntity
 import com.danilatop.aimessenger.agent.AgentRuntime
 import com.danilatop.aimessenger.data.AppDatabase
 import com.danilatop.aimessenger.data.MemoryEntity
@@ -35,12 +38,42 @@ class AIMessengerViewModel(app: Application) : AndroidViewModel(app) {
     val mcpServers = db.mcpServers().observeAll()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val agentProfiles = db.agentProfiles().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val tasks = db.tasks().observeAll()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val approvals = db.approvals().observePending()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     fun messages(conversationId: String) =
         db.messages().observeForConversation(conversationId)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    fun files(conversationId: String) =
+        db.files().observeForConversation(conversationId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun activityForConversation(conversationId: String) =
+        db.activity().observeForConversation(conversationId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun tasksForConversation(conversationId: String) =
+        db.tasks().observeForConversation(conversationId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun approvalsForConversation(conversationId: String) =
+        db.approvals().observeForConversation(conversationId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    fun toolPermissions(conversationId: String) =
+        db.toolPermissions().observeForConversation(conversationId)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
     fun ensureSeed() {
         viewModelScope.launch {
+            AgentProfileCatalog.ensureDefaults(db)
             if (conversations.value.isEmpty()) {
                 runtime.createConversation("Лаборатория AI", "coordinator,deepseek,claude,gemini")
             }
@@ -65,6 +98,42 @@ class AIMessengerViewModel(app: Application) : AndroidViewModel(app) {
     fun send(conversationId: String, text: String, agentId: String = "coordinator") {
         if (text.isBlank()) return
         viewModelScope.launch { runtime.send(conversationId, text.trim(), agentId) }
+    }
+
+    fun saveAgentProfile(profile: AgentProfileEntity) {
+        viewModelScope.launch {
+            db.agentProfiles().upsert(
+                profile.copy(updatedAt = System.currentTimeMillis())
+            )
+        }
+    }
+
+    fun setAgentProfileEnabled(id: String, enabled: Boolean) {
+        viewModelScope.launch {
+            db.agentProfiles().setEnabled(id, enabled, System.currentTimeMillis())
+        }
+    }
+
+    fun setToolPermission(conversationId: String, toolName: String, mode: String) {
+        require(mode in setOf("AUTO", "CONFIRM", "DENY"))
+        viewModelScope.launch {
+            db.toolPermissions().upsert(
+                ToolPermissionEntity(
+                    id = conversationId + ":" + toolName,
+                    conversationId = conversationId,
+                    toolName = toolName,
+                    mode = mode
+                )
+            )
+        }
+    }
+
+    fun approveTool(conversationId: String, approvalId: String) {
+        viewModelScope.launch { runtime.approveTool(conversationId, approvalId) }
+    }
+
+    fun denyTool(conversationId: String, approvalId: String) {
+        viewModelScope.launch { runtime.denyTool(conversationId, approvalId) }
     }
 
     fun setAutonomous(conversationId: String, enabled: Boolean) {
