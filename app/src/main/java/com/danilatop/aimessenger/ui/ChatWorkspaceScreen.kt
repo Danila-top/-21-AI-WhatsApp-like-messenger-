@@ -376,49 +376,104 @@ private fun MemoryPanel(memories: List<com.danilatop.aimessenger.data.MemoryEnti
 @Composable
 private fun ToolsPanel(vm: AIMessengerViewModel, conversationId: String) {
     val servers by vm.mcpServers.collectAsState()
+    val permissions by vm.toolPermissions(conversationId).collectAsState()
+
+    val localTools = listOf(
+        "calculator",
+        "remember",
+        "workspace_write",
+        "schedule_task",
+        "request_external_action"
+    )
+
+    fun defaultMode(tool: String): String =
+        if (tool == "request_external_action") "CONFIRM" else "AUTO"
+
+    fun mode(tool: String): String =
+        permissions.firstOrNull { it.toolName == tool }?.mode ?: defaultMode(tool)
+
+    fun nextMode(current: String): String =
+        when (current) {
+            "AUTO" -> "CONFIRM"
+            "CONFIRM" -> "DENY"
+            else -> "AUTO"
+        }
 
     LazyColumn(
         Modifier.fillMaxSize().padding(12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        item {
+        item { Text("Local tools", fontWeight = FontWeight.Bold) }
+
+        items(localTools) { tool ->
             Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("Local tools", fontWeight = FontWeight.SemiBold)
-                    Text("calculator · remember · workspace_write · schedule_task")
+                Row(
+                    Modifier.fillMaxWidth().padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(tool, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            when (tool) {
+                                "calculator" -> "Локальная арифметика"
+                                "remember" -> "Долговременная память"
+                                "workspace_write" -> "Запись файла в workspace"
+                                "schedule_task" -> "Постановка фоновой AI-задачи"
+                                else -> "Внешнее действие с подтверждением"
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    AssistChip(
+                        onClick = {
+                            vm.setToolPermission(
+                                conversationId,
+                                tool,
+                                nextMode(mode(tool))
+                            )
+                        },
+                        label = { Text(mode(tool)) }
+                    )
                 }
             }
         }
+
         item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
-                    Text("Safety", fontWeight = FontWeight.SemiBold)
-                    Text("External-action tools use human approval by default.")
-                }
-            }
-        }
-        item {
-            Text("MCP connections", fontWeight = FontWeight.SemiBold)
-        }
-        items(servers, key = { it.id }) { server ->
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(server.name, fontWeight = FontWeight.SemiBold)
-                    Text(server.endpoint, style = MaterialTheme.typography.bodySmall)
-                }
-                Switch(
-                    checked = server.enabled,
-                    onCheckedChange = { vm.setMcpServerEnabled(server.id, it) }
-                )
-            }
             HorizontalDivider()
+            Spacer(Modifier.height(4.dp))
+            Text("MCP connections", fontWeight = FontWeight.Bold)
         }
+
+        items(servers, key = { it.id }) { server ->
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(12.dp)) {
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(server.name, fontWeight = FontWeight.SemiBold)
+                            Text(server.endpoint, style = MaterialTheme.typography.bodySmall)
+                        }
+                        Switch(
+                            checked = server.enabled,
+                            onCheckedChange = {
+                                vm.setMcpServerEnabled(server.id, it)
+                            }
+                        )
+                    }
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "Обнаруженные MCP tools требуют CONFIRM по умолчанию.",
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+        }
+
         item {
             Text(
-                "Room: " + conversationId.take(8),
+                "Политика инструментов хранится отдельно для этой комнаты.",
                 style = MaterialTheme.typography.labelSmall
             )
         }
