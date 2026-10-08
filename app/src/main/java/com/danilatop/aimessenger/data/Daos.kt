@@ -86,3 +86,22 @@ interface ToolApprovalDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: ToolApprovalEntity)
 }
+
+
+@Dao
+interface McpServerDao {
+    @Query("SELECT * FROM mcp_servers ORDER BY name ASC")
+    fun observeAll(): Flow<List<McpServerEntity>>
+
+    @Query("SELECT * FROM mcp_servers WHERE id = :id LIMIT 1")
+    suspend fun get(id: String): McpServerEntity?
+
+    @Query("SELECT * FROM mcp_servers WHERE enabled = 1 ORDER BY name ASC")
+    suspend fun enabled(): List<McpServerEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: McpServerEntity)
+
+    @Query("UPDATE mcp_servers SET enabled = :enabled WHERE id = :id")
+    suspend fun setEnabled(id: String, enabled: Boolean)
+}
