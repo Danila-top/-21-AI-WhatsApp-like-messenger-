@@ -17,6 +17,9 @@ import com.danilatop.aimessenger.tools.ToolExecution
 import com.danilatop.aimessenger.tools.ToolRegistry
 import com.danilatop.aimessenger.tools.ToolCall
 import com.danilatop.aimessenger.tasks.TaskScheduler
+import com.danilatop.aimessenger.mcp.McpRegistry
+import com.danilatop.aimessenger.security.SecureStore
+import org.json.JSONObject
 import java.util.UUID
 import kotlin.math.max
 
@@ -24,7 +27,8 @@ class AgentRuntime(
     private val context: Context,
     private val db: AppDatabase,
     private val provider: AIProvider,
-    private val tools: ToolRegistry = ToolRegistry()
+    private val tools: ToolRegistry = ToolRegistry(),
+    private val mcp: McpRegistry = McpRegistry(db, SecureStore(context))
 ) {
     private val agents = DefaultAgents.all.associateBy { it.id }
 
@@ -149,12 +153,18 @@ class AgentRuntime(
         turns.removeAll { it.role == "user" && it.content == input }
         turns += ChatTurn("user", input + memoryPrefix)
 
+        val availableTools = tools.definitions() + mcp.definitions()
+
         val answer = provider.generateWithTools(
             agent = agent,
             turns = turns,
-            tools = tools.definitions(),
+            tools = availableTools,
             execute = { call ->
-                val result = tools.execute(db, conversationId, call)
+                val result = if (call.name.startsWith("mcp_")) {
+                    mcp.execute(conversationId, call)
+                } else {
+                    tools.execute(db, conversationId, call)
+                }
                 log(
                     conversationId,
                     agent.id,
@@ -290,18 +300,39 @@ class AgentRuntime(
         status: String
     ): String {
         require(approvalId.isNotBlank()) { "Укажите id заявки." }
+        val existing = db.approvals().get(approvalId)
+            ?: error("Заявка не найдена: " + approvalId)
+
         db.approvals().upsert(
-            ToolApprovalEntity(
-                id = approvalId,
-                conversationId = conversationId,
-                toolName = "manual",
-                arguments = "",
+            existing.copy(
                 status = status,
                 resolvedAt = System.currentTimeMillis()
             )
         )
+
+        if (status == "APPROVED" && existing.toolName.startsWith("mcp_")) {
+            val call = ToolCall(
+                id = existing.id,
+                name = existing.toolName,
+                arguments = JSONObject(existing.arguments)
+            )
+            val result = mcp.executeApproved(call)
+            log(
+                conversationId,
+                "human",
+                "tool_approval.executed",
+                result.output.take(500)
+            )
+            saveAssistant(conversationId, "mcp", result.output)
+            return result.output
+        }
+
         log(conversationId, "human", "tool_approval." + status.lowercase(), approvalId)
-        val answer = "Заявка " + approvalId + ": " + status
+        val answer = if (status == "APPROVED") {
+            "Заявка " + approvalId + " одобрена."
+        } else {
+            "Заявка " + approvalId + " отклонена."
+        }
         saveAssistant(conversationId, "system", answer)
         return answer
     }
