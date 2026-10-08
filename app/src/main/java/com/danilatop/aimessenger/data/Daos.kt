@@ -14,6 +14,9 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE id = :id LIMIT 1")
     suspend fun get(id: String): ConversationEntity?
 
+    @Query("UPDATE conversations SET autonomous = :enabled, updatedAt = :updatedAt WHERE id = :id")
+    suspend fun setAutonomous(id: String, enabled: Boolean, updatedAt: Long)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: ConversationEntity)
 }
@@ -49,4 +52,31 @@ interface ActivityDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(item: ActivityLogEntity)
+}
+
+@Dao
+interface WorkspaceFileDao {
+    @Query("SELECT * FROM workspace_files WHERE conversationId = :conversationId ORDER BY name ASC")
+    fun observeForConversation(conversationId: String): Flow<List<WorkspaceFileEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: WorkspaceFileEntity)
+}
+
+@Dao
+interface ScheduledTaskDao {
+    @Query("SELECT * FROM scheduled_tasks ORDER BY nextRunAt ASC")
+    fun observeAll(): Flow<List<ScheduledTaskEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: ScheduledTaskEntity)
+}
+
+@Dao
+interface ToolApprovalDao {
+    @Query("SELECT * FROM tool_approvals WHERE status = 'PENDING' ORDER BY createdAt DESC")
+    fun observePending(): Flow<List<ToolApprovalEntity>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: ToolApprovalEntity)
 }
