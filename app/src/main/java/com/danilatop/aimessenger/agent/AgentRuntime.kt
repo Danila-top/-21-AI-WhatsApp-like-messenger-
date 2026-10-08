@@ -294,6 +294,12 @@ class AgentRuntime(
         return answer
     }
 
+    suspend fun approveTool(conversationId: String, approvalId: String): Result<String> =
+        runCatching { resolveApproval(conversationId, approvalId, "APPROVED") }
+
+    suspend fun denyTool(conversationId: String, approvalId: String): Result<String> =
+        runCatching { resolveApproval(conversationId, approvalId, "DENIED") }
+
     private suspend fun resolveApproval(
         conversationId: String,
         approvalId: String,
