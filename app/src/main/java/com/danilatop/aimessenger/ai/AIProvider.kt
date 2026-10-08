@@ -74,7 +74,7 @@ class AIProvider(private val secureStore: SecureStore) {
             .put("stream", false)
             .toString()
         val base = agent.baseUrl.trimEnd('/')
-        val url = if (base.endsWith("/v1")) "$base/chat/completions" else "$base/v1/chat/completions"
+        val url = if (base.endsWith("/v1")) base + "/chat/completions" else base + "/v1/chat/completions"
 
         val request = Request.Builder()
             .url(url)
@@ -108,7 +108,7 @@ class AIProvider(private val secureStore: SecureStore) {
             .toString()
 
         val request = Request.Builder()
-            .url("\${agent.baseUrl.trimEnd('/')}/v1/messages")
+            .url("agent.baseUrl.trimEnd('/') + "/v1/messages"")
             .addHeader("x-api-key", key)
             .addHeader("anthropic-version", "2023-06-01")
             .post(body.toRequestBody(jsonType))
@@ -131,7 +131,7 @@ class AIProvider(private val secureStore: SecureStore) {
                 .put("role", "user")
                 .put("parts", JSONArray().put(JSONObject().put("text", prompt)))
         )
-        val url = "\${agent.baseUrl.trimEnd('/')}/v1beta/models/\${agent.model}:generateContent?key=$key"
+        val url = "agent.baseUrl.trimEnd('/') + "/v1beta/models/" + agent.model + ":generateContent?key=" + key"
         val body = JSONObject().put("contents", contents).toString()
 
         val request = Request.Builder()
