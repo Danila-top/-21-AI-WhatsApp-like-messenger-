@@ -365,6 +365,9 @@ private fun SettingsScreen(
     var deepSeek by remember { mutableStateOf("") }
     var claude by remember { mutableStateOf("") }
     var gemini by remember { mutableStateOf("") }
+    var mcpName by remember { mutableStateOf("") }
+    var mcpEndpoint by remember { mutableStateOf("") }
+    var mcpToken by remember { mutableStateOf("") }
     var memoryKey by remember { mutableStateOf("") }
     var memoryValue by remember { mutableStateOf("") }
 
@@ -429,6 +432,70 @@ private fun SettingsScreen(
                 ) {
                     vm.setApiKey("Gemini", gemini)
                     gemini = ""
+                }
+            }
+            item { HorizontalDivider() }
+            item {
+                Text(
+                    "MCP-серверы",
+                    Modifier.padding(horizontal = 16.dp),
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+            item {
+                OutlinedTextField(
+                    mcpName,
+                    { mcpName = it },
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    label = { Text("Название сервера") },
+                    singleLine = true
+                )
+            }
+            item {
+                OutlinedTextField(
+                    mcpEndpoint,
+                    { mcpEndpoint = it },
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    label = { Text("Streamable HTTP endpoint") },
+                    singleLine = true
+                )
+            }
+            item {
+                OutlinedTextField(
+                    mcpToken,
+                    { mcpToken = it },
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    label = { Text("Bearer token (необязательно)") },
+                    singleLine = true
+                )
+            }
+            item {
+                FilledTonalButton(
+                    onClick = {
+                        vm.connectMcpServer(mcpName, mcpEndpoint, mcpToken)
+                        mcpName = ""
+                        mcpEndpoint = ""
+                        mcpToken = ""
+                    },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) {
+                    Text("Подключить MCP")
+                }
+            }
+            val mcpServers by vm.mcpServers.collectAsState()
+            items(mcpServers, key = { it.id }) { server ->
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(server.name, fontWeight = FontWeight.SemiBold)
+                        Text(server.endpoint, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Switch(
+                        checked = server.enabled,
+                        onCheckedChange = { vm.setMcpServerEnabled(server.id, it) }
+                    )
                 }
             }
             item { HorizontalDivider() }
