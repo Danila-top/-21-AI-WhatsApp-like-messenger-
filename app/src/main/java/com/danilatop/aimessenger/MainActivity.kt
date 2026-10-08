@@ -56,6 +56,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.danilatop.aimessenger.data.MessageEntity
+import com.danilatop.aimessenger.ui.ChatWorkspaceScreen
 
 class MainActivity : ComponentActivity() {
     private val vm by viewModels<AIMessengerViewModel>()
@@ -76,7 +77,11 @@ fun MessengerApp(vm: AIMessengerViewModel = viewModel()) {
     MaterialTheme {
         when {
             screen == "settings" -> SettingsScreen(vm) { screen = "home" }
-            selected != null -> ChatScreen(selected!!, vm) { selected = null }
+            selected != null -> ChatWorkspaceScreen(
+                conversationId = selected!!,
+                vm = vm,
+                onBack = { selected = null }
+            )
             else -> HomeScreen(vm, { selected = it }) { screen = "settings" }
         }
     }
