@@ -136,3 +136,16 @@ interface AgentProfileDao {
     @Query("UPDATE agent_profiles SET enabled = :enabled, updatedAt = :updatedAt WHERE id = :id")
     suspend fun setEnabled(id: String, enabled: Boolean, updatedAt: Long)
 }
+
+
+@Dao
+interface ToolPermissionDao {
+    @Query("SELECT * FROM tool_permissions WHERE conversationId = :conversationId OR conversationId IS NULL ORDER BY toolName ASC")
+    fun observeForConversation(conversationId: String): Flow<List<ToolPermissionEntity>>
+
+    @Query("SELECT * FROM tool_permissions WHERE conversationId = :conversationId AND toolName = :toolName LIMIT 1")
+    suspend fun get(conversationId: String, toolName: String): ToolPermissionEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: ToolPermissionEntity)
+}
