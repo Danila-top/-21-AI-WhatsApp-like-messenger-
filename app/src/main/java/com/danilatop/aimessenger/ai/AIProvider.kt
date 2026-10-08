@@ -78,7 +78,7 @@ class AIProvider(private val secureStore: SecureStore) {
                 ?: error("Нет API-ключа для " + agent.name + ". Открой Настройки → Провайдеры.")
 
             when (agent.provider) {
-                ProviderKind.OPENAI,
+                ProviderKind.OPENAI -> openAiResponses(agent, key, turns)
                 ProviderKind.DEEPSEEK,
                 ProviderKind.OPENAI_COMPATIBLE -> openAiStyle(agent, key, turns)
                 ProviderKind.ANTHROPIC -> anthropic(agent, key, turns)
