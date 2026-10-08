@@ -13,9 +13,10 @@ import androidx.room.RoomDatabase
         ActivityLogEntity::class,
         WorkspaceFileEntity::class,
         ScheduledTaskEntity::class,
-        ToolApprovalEntity::class
+        ToolApprovalEntity::class,
+        McpServerEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -26,6 +27,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun files(): WorkspaceFileDao
     abstract fun tasks(): ScheduledTaskDao
     abstract fun approvals(): ToolApprovalDao
+    abstract fun mcpServers(): McpServerDao
 
     companion object {
         @Volatile private var INSTANCE: AppDatabase? = null
